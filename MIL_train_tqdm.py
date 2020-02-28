@@ -21,40 +21,15 @@ from sklearn.metrics import balanced_accuracy_score,recall_score
 from tqdm import tqdm as tqdm
 import pickle
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 
-# parser = argparse.ArgumentParser(description='MIL-nature-medicine-2019 tile classifier training script')
-# parser.add_argument('--train_lib', type=str, default='', help='path to train MIL library binary')
-# parser.add_argument('--val_lib', type=str, default='', help='path to validation MIL library binary. If present.')
-# parser.add_argument('--output', type=str, default='.', help='name of output file')
-# parser.add_argument('--batch_size', type=int, default=512, help='mini-batch size (default: 512)')
-# parser.add_argument('--nepochs', type=int, default=100, help='number of epochs')
-# parser.add_argument('--workers', default=4, type=int, help='number of data loading workers (default: 4)')
-# parser.add_argument('--test_every', default=10, type=int, help='test on val every (default: 10)')
-# parser.add_argument('--weights', default=0.5, type=float, help='unbalanced positive class weight (default: 0.5, balanced classes)')
-# parser.add_argument('--k', default=1, type=int, help='top k tiles are assumed to be of the same class as the slide (default: 1, standard MIL)')
-
-parser = argparse.ArgumentParser(description='MIL-nature-medicine-2019 tile classifier training script')
-parser.add_argument('--train_lib', type=str, default='output/lib/512/cnn_train_data_lib.db', help='path to train MIL library binary')
-parser.add_argument('--val_lib', type=str, default='output/lib/512/cnn_val_data_lib.db', help='path to validation MIL library binary. If present.')
-parser.add_argument('--output', type=str, default='output/', help='name of output file')
-parser.add_argument('--batch_size', type=int, default=256, help='mini-batch size (default: 512)')
-parser.add_argument('--nepochs', type=int, default=50, help='number of epochs')
-parser.add_argument('--workers', default=0, type=int, help='number of data loading workers (default: 4)')
-# 如果是在docker中运行时需注意,因为容器设定的shm内存不够会出现相关报错,此时将num_workers设为0则可
-#parser.add_argument('--test_every', default=10, type=int, help='test on val every (default: 10)')
-parser.add_argument('--weights', default=0.79, type=float, help='unbalanced positive class weight (default: 0.5, balanced classes)')
-parser.add_argument('--k', default=5, type=int, help='top k tiles are assumed to be of the same class as the slide (default: 1, standard MIL)')
-#parser.add_argument('--tqdm_visible',default = True, type=bool,help='keep the processing of tqdm visible or not, default: True')
-
-best_acc = 0
-def main():
+def main(parser):
     global args, best_acc
     args = parser.parse_args()
-
+    best_acc = 0
+    
     #cnn
     model = models.resnet34(pretrained = False)
-    model_path = model_path = '/cptjack/totem_disk/sys_software_bak/pytorch_models/model_weight/resnet34-333f7ec4.pth'
+    model_path = model_path = '/your_dir/resnet34-333f7ec4.pth'
     model.load_state_dict(torch.load(model_path))
 #   如果加载自己模型就改为使用上述两句命令
     model.fc = nn.Linear(model.fc.in_features, 2)
@@ -356,4 +331,29 @@ class MILdataset(data.Dataset):
             return len(self.t_data)
 
 if __name__ == '__main__':
-    main()
+    os.environ["CUDA_VISIBLE_DEVICES"] = "2"
+    
+    # parser = argparse.ArgumentParser(description='MIL-nature-medicine-2019 tile classifier training script')
+    # parser.add_argument('--train_lib', type=str, default='', help='path to train MIL library binary')
+    # parser.add_argument('--val_lib', type=str, default='', help='path to validation MIL library binary. If present.')
+    # parser.add_argument('--output', type=str, default='.', help='name of output file')
+    # parser.add_argument('--batch_size', type=int, default=512, help='mini-batch size (default: 512)')
+    # parser.add_argument('--nepochs', type=int, default=100, help='number of epochs')
+    # parser.add_argument('--workers', default=4, type=int, help='number of data loading workers (default: 4)')
+    # parser.add_argument('--test_every', default=10, type=int, help='test on val every (default: 10)')
+    # parser.add_argument('--weights', default=0.5, type=float, help='unbalanced positive class weight (default: 0.5, balanced classes)')
+    # parser.add_argument('--k', default=1, type=int, help='top k tiles are assumed to be of the same class as the slide (default: 1, standard MIL)')
+    
+    parser = argparse.ArgumentParser(description='MIL-nature-medicine-2019 tile classifier training script')
+    parser.add_argument('--train_lib', type=str, default='output/lib/512/cnn_train_data_lib.db', help='path to train MIL library binary')
+    parser.add_argument('--val_lib', type=str, default='output/lib/512/cnn_val_data_lib.db', help='path to validation MIL library binary. If present.')
+    parser.add_argument('--output', type=str, default='output/', help='name of output file')
+    parser.add_argument('--batch_size', type=int, default=256, help='mini-batch size (default: 512)')
+    parser.add_argument('--nepochs', type=int, default=50, help='number of epochs')
+    parser.add_argument('--workers', default=0, type=int, help='number of data loading workers (default: 4)')
+    # 如果是在docker中运行时需注意,因为容器设定的shm内存不够会出现相关报错,此时将num_workers设为0则可
+    #parser.add_argument('--test_every', default=10, type=int, help='test on val every (default: 10)')
+    parser.add_argument('--weights', default=0.79, type=float, help='unbalanced positive class weight (default: 0.5, balanced classes)')
+    parser.add_argument('--k', default=5, type=int, help='top k tiles are assumed to be of the same class as the slide (default: 1, standard MIL)')
+
+    main(parser)
