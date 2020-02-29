@@ -50,13 +50,13 @@
 5. 针对`MILdataset`类,新增**patch size**的读取(每一个**slide**文件对应一个**patch size**数值);在`maketraindata`方法中新增复制采样的方法,为后面在`__getitem__`中采用不同参数的`adjust_hue`方法打下基础。颜色转换的操作放在在`__getitem__`中进行而不是在`transforms.Compose`中进行，确保在预测/计算概率的时候不进行任何变换，只在**train**的时候才引入变换。
 
 6. 将原来日志输出通过`print`打印到屏幕改为使用`tqdm`库动态在屏幕显示输出，能实时监控每个batch对应评估指标的数值。效果大致如下：
-![](doc/images/created_gif.gif)
+![](https://github.com/BohriumKwong/using-weakly-supervised-deep-learning-on-whole-slide-images/blob/master/doc/images/created_gif.gif)
 
 ****
 
 > **论文中MIL过程原理图如下**
 
-![](doc/images/structure.png)
+![](https://github.com/BohriumKwong/using-weakly-supervised-deep-learning-on-whole-slide-images/blob/master/doc/images/structure.png)
 
 ****
 

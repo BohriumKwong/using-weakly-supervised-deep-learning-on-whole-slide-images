@@ -5,7 +5,7 @@
 
 ****
 
-![架构](./images/structure.png)
+![架构](https://github.com/BohriumKwong/using-weakly-supervised-deep-learning-on-whole-slide-images/blob/master/doc/images/structure.png)
 
 # MIL
 
