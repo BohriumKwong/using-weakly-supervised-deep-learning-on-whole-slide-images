@@ -29,7 +29,7 @@ def main(parser):
     
     #cnn
     model = models.resnet34(pretrained = False)
-    model_path = model_path = '/your_dir/resnet34-333f7ec4.pth'
+    model_path = '/your_dir/resnet34-333f7ec4.pth'
     model.load_state_dict(torch.load(model_path))
 #   如果加载自己模型就改为使用上述两句命令
     model.fc = nn.Linear(model.fc.in_features, 2)
