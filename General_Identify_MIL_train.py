@@ -20,30 +20,31 @@ import time
 from sklearn.metrics import balanced_accuracy_score,recall_score
 from tqdm import tqdm as tqdm
 import pickle
+from mark_result import result_excel
+
 
 
 def main(parser):
     global args, best_acc
     args = parser.parse_args()
     best_acc = 0
-    
+
     #cnn
     model = models.resnet34(pretrained = False)
-    model_path = '/your_dir/resnet34-333f7ec4.pth'
-    model.load_state_dict(torch.load(model_path))
+#    model_path = model_path = '/your_dir/resnet34-333f7ec4.pth'
+    model_dict = torch.load('/your_dir/resnet34-best.pth')
 #   如果加载自己模型就改为使用上述两句命令
     model.fc = nn.Linear(model.fc.in_features, 2)
     model.cuda()
     model = nn.DataParallel(model)
-#    model.load_state_dict(model_dict['state_dict'])
-    
+    model.load_state_dict(model_dict['state_dict'])
+
     if args.weights==0.5:
         criterion = nn.CrossEntropyLoss().cuda()
     else:
         w = torch.Tensor([1-args.weights, args.weights])
         criterion = nn.CrossEntropyLoss(w).cuda()
     optimizer = optim.Adam(model.parameters(), lr=1e-5, weight_decay=1e-5)
-#    optimizer.load_state_dict(model_dict['optimizer'])
 
     cudnn.benchmark = True
 
@@ -56,13 +57,13 @@ def main(parser):
     val_trans = transforms.Compose([transforms.ToTensor(), normalize])
     
     #load data
-    train_dset = MILdataset(args.train_lib, train_trans)
+    train_dset = MILdataset(args.train_lib, args.k,train_trans)
     train_loader = torch.utils.data.DataLoader(
         train_dset,
         batch_size=args.batch_size, shuffle=False,
         num_workers=args.workers, pin_memory=False)
     if args.val_lib:
-        val_dset = MILdataset(args.val_lib, val_trans)
+        val_dset = MILdataset(args.val_lib, 0,val_trans)
         val_loader = torch.utils.data.DataLoader(
             val_dset,
             batch_size=args.batch_size, shuffle=False,
@@ -73,15 +74,15 @@ def main(parser):
         
     #open output file
     fconv = open(os.path.join(args.output, time_mark + 'CNN_convergence_512.csv'), 'w')
-    fconv.write(' ,Train,,,,Validation,,,\n')
-    fconv.write('epoch,acc,recall,fnr,loss,acc,recall,fnr')
+    fconv.write(' ,Training,,,,Train_whole,,,Validation,,\n')
+    fconv.write('epoch,train_acc,train_recall,train_fnr,train_loss,true_acc,true_recall,true_fnr,acc,recall,fnr')
     fconv.close()
     topk_list = []
     #用于存储每一轮算出来的top k index
     early_stop_count = 0
     #标记是否early stop的变量，该变量>3时,就停止训练
     list_save_dir = os.path.join('output','topk_list')
-    if not os.path.isdir(list_save_dir): os.makedirs(list_save_dir) 
+    if not os.path.isdir(list_save_dir): os.makedirs(list_save_dir)  
     #loop throuh epochs
     for epoch in range(args.nepochs):
         if epoch >=10 and early_stop_count > 3:
@@ -89,36 +90,49 @@ def main(parser):
             break
         start_time = time.time()
         #Train
-        train_dset.setmode(1)
-        probs = inference(epoch, train_loader, model,'train',args.batch_size,train_dset.label_mark)
-        np.save('output/numpy_save/train_infer_probs.npy',probs)
-        topk = group_argtopk(np.array(train_dset.slideIDX), probs, args.k)
-        repeat = True
-        if epoch >=12:
+        topk_exist_flag = False
+        if os.path.exists(os.path.join(list_save_dir, time_mark + '.pkl')) and epoch ==0:
+            with open(os.path.join(list_save_dir, time_mark + '.pkl'), 'rb') as fp:
+                topk,t_pred = pickle.load(fp)
+
+            topk = topk[-1]
+            topk_exist_flag = True
+
+        else:
+            train_dset.setmode(1)
+            train_probs = inference(epoch, train_loader, model, args.batch_size, 'train')
+            t_pred = group_max(np.array(train_dset.slideIDX), train_probs)
+            topk = group_argtopk(np.array(train_dset.slideIDX), np.argmax(train_probs,axis=1), args.k)
+        repeat = 5
+        if epoch >=10:
 #            repeat = bool(random.getrandbits(1))            
             #前10轮设定在训练时复制采样,后10轮后随机决定是否复制采样
             topk_last = topk_list[-1]
             if sum(np.not_equal(topk_last, topk)) < 0.01 * len(topk):
                 early_stop_count +=1
-        topk_list.append(topk.copy())
-        with open(os.path.join(list_save_dir, time_mark + '_gen.pkl'), 'wb') as fp:
+        if not topk_exist_flag:
+            topk_list.append((topk.copy(),t_pred.copy()))
+        with open(os.path.join(list_save_dir, time_mark + '.pkl'), 'wb') as fp:
             pickle.dump(topk_list, fp)
+
         train_dset.maketraindata(topk,repeat)
         train_dset.shuffletraindata()
         train_dset.setmode(2)
         whole_acc,whole_recall,whole_fnr,whole_loss = train(epoch, train_loader, model, criterion, optimizer)
         print('\tTraining  Epoch: [{}/{}] Acc: {} Recall:{} Fnr:{} Loss: {}'.format(epoch+1, \
               args.nepochs, whole_acc,whole_recall,whole_fnr,whole_loss))
-        result = '\n'+str(epoch+1) + ',' + str(whole_acc) + ',' +str(whole_recall)+ ',' +str(whole_fnr)+ ',' +str(whole_loss)
-
+        metrics_meters = calc_accuracy(np.argmax(t_pred,axis=1), train_dset.targets)
+        result = '\n'+str(epoch+1) + ',' + str(whole_acc) + ',' +str(whole_recall)+ ',' +str(whole_fnr)+ ',' +str(whole_loss) \
+                + ','+ str(metrics_meters['acc']) + ',' + str(metrics_meters['recall']) + ','\
+                + str(metrics_meters['fnr'])
+        #将基于slides的相关指标也计算出来,和训练过程中的统计指标做对比
         #Validation
 #        if args.val_lib and (epoch+1) % args.test_every == 0:
         val_dset.setmode(1)
-        probs = inference(epoch, val_loader, model,'val',args.batch_size)
-        pred = group_max(np.array(val_dset.slideIDX), probs)
-        np.save('output/numpy_save/val_infer_probs.npy',pred)
-#        pred = [1 if x >= 0.5 else 0 for x in maxs]
-        metrics_meters = calc_accuracy(np.argmax(pred,axis=1), val_dset.targets)
+        val_probs = inference(epoch, val_loader, model, args.batch_size, 'val')
+        v_pred = group_max(np.array(val_dset.slideIDX), val_probs)
+#        np.save('output/numpy_save/val_infer_probs.npy',pred)
+        metrics_meters = calc_accuracy(np.argmax(v_pred,axis=1), val_dset.targets)
         str_logs = ['{} - {:.4}'.format(k, v) for k, v in metrics_meters.items()]
         s = ', '.join(str_logs)
         print('\tValidation  Epoch: [{}/{}]  '.format(epoch+1, args.nepochs) + s)
@@ -138,56 +152,48 @@ def main(parser):
                 'optimizer' : optimizer.state_dict()
             }
             torch.save(obj, os.path.join(args.output, time_mark +'CNN_checkpoint_best.pth'))
-    
-                               
-    with open(os.path.join(list_save_dir, time_mark + '_gen.pkl'), 'wb') as fp:
+
+            if epoch > 0:
+                result_excel(train_dset,train_probs,time_mark + 'train_' + str(epoch+1))
+                result_excel(val_dset,v_pred,time_mark + 'val_'+ str(epoch+1))
+                #将预测结果和实际结果保存在一个excel表上,方便对比
+
+        print('\tEpoch %d has been finished, needed %.2f sec.' % (epoch + 1,time.time() - start_time))   
+    with open(os.path.join(list_save_dir, time_mark + '.pkl'), 'wb') as fp:
         pickle.dump(topk_list, fp)
-    print('\tEpoch %d has been finished, needed %.2f sec.' % (epoch,time.time() - start_time))
-      
 
-def inference(run, loader, model, phase,batch_size,label_mark  = None):
+
+
+def inference(run, loader, model, batch_size,phase):
     model.eval()
-#    probs = torch.FloatTensor(len(loader.dataset))
-    if phase == 'train':
-        probs = np.zeros((1,1))
-    else:
-        probs = np.zeros((1,2))
-    logs = {}
-    whole_proba = 0.
+    probs = np.zeros((1,2))
+#    logs = {}
+    whole_probably = 0.
 
-    
     with torch.no_grad():
         with tqdm(loader, desc = 'Epoch:' + str(run+1) + ' ' + phase + '\'s inferencing', \
                   file=sys.stdout, disable = False) as iterator:
             for i, input in enumerate(iterator):
 #                print('Inference\tEpoch: [{}/{}]\tBatch: [{}/{}]'.format(run+1, args.nepochs, i+1, len(iterator)))
-                input = input.cuda()                
+                input = input.cuda()
                 output = F.softmax(model(input), dim=1)
                 prob = output.detach().clone()
                 prob = prob.cpu().numpy()                
                 batch_proba = np.mean(prob,axis=0)
-                if phase == 'train' and label_mark is not None:
-                   prob = prob[label_mark[i*batch_size:i*batch_size+input.size(0),:]]
-                   prob = prob.reshape(input.size(0),1)
-#                   print(probs.shape,prob.shape,label_mark[i*args.batch_size:i*args.batch_size+input.size(0),:].shape)
                 probs = np.row_stack((probs,prob))
+                whole_probably = whole_probably + batch_proba
+#                temp_log = {'batch proba ': str(batch_proba)}
+#                logs.update(temp_log)
                 
-                whole_proba = whole_proba + batch_proba
-                temp_log = {'batch proba ': str(batch_proba)}
-                logs.update(temp_log)
+#                str_logs = ['{} - {:.4}'.format(k, v) for k, v in logs.items()]
+#                s = ', '.join(str_logs)
+                iterator.set_postfix_str('batch proba :' +  str(batch_proba))
                 
-                str_logs = ['{} - {}'.format(k, v) for k, v in logs.items()]
-                s = ', '.join(str_logs)
-                iterator.set_postfix_str(s)                                    
-                
-            whole_proba = whole_proba / (i+1)
-            iterator.set_postfix_str('Whole proba is ' + str(whole_proba))
+            whole_probably = whole_probably / (i+1)
+            iterator.set_postfix_str('Whole average probably is ' + str(whole_probably))
             
     probs = np.delete(probs, 0, axis=0)
-    if phase == 'train':       
-        return probs.reshape(-1)
-    else:
-        return probs.reshape(-1,2)
+    return probs.reshape(-1,2)
 
 def train(run, loader, model, criterion, optimizer):
     model.train()
@@ -279,7 +285,7 @@ def group_max(groups, data):
     return np.delete(whole_mean_proba, 0, axis=0)  
 
 class MILdataset(data.Dataset):
-    def __init__(self, libraryfile='', transform=None):
+    def __init__(self, libraryfile='', k=0, transform=None):
         lib = torch.load(libraryfile)
         slides = []
         patch_size = []
@@ -294,17 +300,15 @@ class MILdataset(data.Dataset):
         #Flatten grid
         grid = []
         slideIDX = []
-        label_mark = []
         #slideIDX列表存放每个WSI以及其坐标列表的标记,假设有0,1,2号三个WSI图像,分别于grid中记录4,7,3组提取的坐标,\
         # 返回为[0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2]
         for i,g in enumerate(lib['grid']):
+            if len(g) < k:
+                g = g + [(g[x]) for x in np.random.choice(range(len(g)), k-len(g))]
+            #如果当前slide的girds长度小于设定的top k的值,就再随机重复采样到足够的长度
             grid.extend(g)
             slideIDX.extend([i]*len(g))
-            if int(lib['targets'][i]) == 0:
-                label_mark.extend([(True,False)]*len(g))
-            elif int(lib['targets'][i]) == 1:
-                label_mark.extend([(False,True)]*len(g))
-        label_mark = np.array(label_mark)         
+
         print('Number of tiles: {}'.format(len(grid)))
         self.slidenames = lib['slides']
         self.slides = slides
@@ -315,16 +319,17 @@ class MILdataset(data.Dataset):
         self.mode = None
         self.patch_size = patch_size
         self.level = lib['level']
-        self.label_mark = label_mark
     def setmode(self,mode):
         self.mode = mode
-    def maketraindata(self, idxs,repeat=False):
+    def maketraindata(self, idxs,repeat=0):
         #repeat这个参数用于是否对采样进行复制,如果进行复制,就会在下面的_getitem_方法中对重复的样本进行不一样的颜色增强
-        if not repeat:
+        if abs(repeat) == 0:
             self.t_data = [(self.slideIDX[x],self.grid[x],self.targets[self.slideIDX[x]],0) for x in idxs]
         else:
-            self.t_data = [(self.slideIDX[x],self.grid[x],self.targets[self.slideIDX[x]],1) for x in idxs] +\
-                           [(self.slideIDX[x],self.grid[x],self.targets[self.slideIDX[x]],-1) for x in idxs]
+            repeat = abs(repeat) if repeat % 2 == 1 else abs(repeat) + 1
+            self.t_data = [(self.slideIDX[x],self.grid[x],self.targets[self.slideIDX[x]],0) for x in idxs]
+            for y in range(-100,int(100 + repeat/2),int(100*2/repeat)):
+                self.t_data = self.t_data + [(self.slideIDX[x],self.grid[x],self.targets[self.slideIDX[x]],y/1000) for x in idxs]
     def shuffletraindata(self):
         self.t_data = random.sample(self.t_data, len(self.t_data))
     def __getitem__(self,index):
@@ -348,11 +353,11 @@ class MILdataset(data.Dataset):
             img = self.slides[slideIDX].read_region(coord,self.level,(self.patch_size[slideIDX],\
                                                     self.patch_size[slideIDX])).convert('RGB')
             if h_value > 0:
-                hue_factor = random.uniform(0,0.1) 
+                hue_factor = random.uniform(h_value,0.1)
             elif h_value == 0:
-                hue_factor = random.uniform(-0.1,0.1)                    
+                hue_factor = random.uniform(0,0)
             elif h_value < 0:                
-                hue_factor = random.uniform(-0.1,0)    
+                hue_factor = random.uniform(-0.1,h_value)
             img = functional.adjust_hue(img,hue_factor)
             # 只有在训练模式下才进行H通道变换的颜色增强方法
             # 如果在maketraindata方法设置采样复制,那么就会针对h_value的值进行不同方向的hue_factor生成,\
@@ -369,8 +374,7 @@ class MILdataset(data.Dataset):
             return len(self.t_data)
 
 if __name__ == '__main__':
-    os.environ["CUDA_VISIBLE_DEVICES"] = "1"
-    
+    os.environ["CUDA_VISIBLE_DEVICES"] = "2"
     # parser = argparse.ArgumentParser(description='MIL-nature-medicine-2019 tile classifier training script')
     # parser.add_argument('--train_lib', type=str, default='', help='path to train MIL library binary')
     # parser.add_argument('--val_lib', type=str, default='', help='path to validation MIL library binary. If present.')
@@ -387,11 +391,12 @@ if __name__ == '__main__':
     parser.add_argument('--val_lib', type=str, default='output/lib/512/cnn_val_data_lib.db', help='path to validation MIL library binary. If present.')
     parser.add_argument('--output', type=str, default='output/', help='name of output file')
     parser.add_argument('--batch_size', type=int, default=256, help='mini-batch size (default: 512)')
-    parser.add_argument('--nepochs', type=int, default=10, help='number of epochs')
+    parser.add_argument('--nepochs', type=int, default=14, help='number of epochs')
     parser.add_argument('--workers', default=0, type=int, help='number of data loading workers (default: 4)')
     # 如果是在docker中运行时需注意,因为容器设定的shm内存不够会出现相关报错,此时将num_workers设为0则可
     #parser.add_argument('--test_every', default=10, type=int, help='test on val every (default: 10)')
     parser.add_argument('--weights', default=0.79, type=float, help='unbalanced positive class weight (default: 0.5, balanced classes)')
-    parser.add_argument('--k', default=5, type=int, help='top k tiles are assumed to be of the same class as the slide (default: 1, standard MIL)')
+    parser.add_argument('--k', default=10, type=int, help='top k tiles are assumed to be of the same class as the slide (default: 1, standard MIL)')
+    #parser.add_argument('--tqdm_visible',default = True, type=bool,help='keep the processing of tqdm visible or not, default: True')
 
     main(parser)
