@@ -107,7 +107,7 @@ def main(parser):
         if epoch >=10:
 #            repeat = bool(random.getrandbits(1))            
             #前10轮设定在训练时复制采样,后10轮后随机决定是否复制采样
-            topk_last = topk_list[-1]
+            topk_last = topk_list[-1][0]
             if sum(np.not_equal(topk_last, topk)) < 0.01 * len(topk):
                 early_stop_count +=1
         if not topk_exist_flag:
