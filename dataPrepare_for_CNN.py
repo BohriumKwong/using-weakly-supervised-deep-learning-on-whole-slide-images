@@ -48,9 +48,10 @@ for filename in files:
 #        continue
     start_time = time.time()
     slide = openslide.open_slide(filename)
-    properties = slide.properties
-    mpp = np.float(properties['openslide.mpp-x'])
+
     try:
+        properties = slide.properties
+        mpp = np.float(properties['openslide.mpp-x'])
         if round(mpp/0.25) == 1:
             patch_size = 448
         elif round(mpp/0.25) == 2:
