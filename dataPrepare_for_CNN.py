@@ -11,11 +11,15 @@ import glob
 
 # svs 文件所在路径
 #data_dir = os.path.join(os.path.abspath(os.path.dirname(os.path.abspath(__file__)) + os.path.sep + "."), 'dataset')
-data_dir = '/cptjack/totem_data_backup/totem/COLORECTAL_DATA/dataset/svs'
+data_dir = '/your path/svs'
 
 # target 列表
-target_df = pd.read_csv('/cptjack/totem_data_backup/totem/COLORECTAL_DATA/dataset/target.csv')
-
+target_df = pd.read_csv('/yourpath/target.csv')
+#target_df是一个含有两列的表,格式如下:
+#| file_name        | class |
+#| :--------------: | :---: |
+#| data_dir/*.svs   |   0   |
+#| data_dir/*.svs   |   1   |
 
 # ---------------------- 相关变量的格式定义，参考 README.md ---------------------- #
 # 最终保存全部数据的字典
