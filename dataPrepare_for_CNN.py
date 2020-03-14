@@ -18,8 +18,10 @@ target_df = pd.read_csv('/yourpath/target.csv')
 #target_df是一个含有两列的表,格式如下:
 #| file_name        | class |
 #| :--------------: | :---: |
-#| data_dir/*.svs   |   0   |
-#| data_dir/*.svs   |   1   |
+#| ---------*.svs   |   0   |
+#| --------/*.svs   |   1   |
+#| ..............   |  ...  |
+
 
 # ---------------------- 相关变量的格式定义，参考 README.md ---------------------- #
 # 最终保存全部数据的字典
@@ -52,7 +54,7 @@ for filename in files:
 #        continue
     start_time = time.time()
     slide = openslide.open_slide(filename)
-
+    basename = os.path.basename(filename)
     try:
         properties = slide.properties
         mpp = np.float(properties['openslide.mpp-x'])
@@ -102,7 +104,7 @@ for filename in files:
         if len(cur_patch_cords) > 5:
             train_slides_list.append(filename)
             train_patch_size_list(patch_size)
-            train_targets_list.append(target_df[target_df['slide'] == filename]['target'].values[0])
+            train_targets_list.append(target_df[target_df['slide'] == basename]['target'].values[0])
             train_grids_list.append(cur_patch_cords)
             train_sum = train_sum + len(cur_patch_cords)
     else:
@@ -124,7 +126,7 @@ for filename in files:
         if len(cur_patch_cords) > 5:
             val_slides_list.append(filename)
             val_patch_size_list(patch_size)
-            val_targets_list.append(target_df[target_df['slide'] == filename]['target'].values[0])            
+            val_targets_list.append(target_df[target_df['slide'] == basename]['target'].values[0])            
             val_grids_list.append(cur_patch_cords)
             val_sum = val_sum + len(cur_patch_cords)
         
