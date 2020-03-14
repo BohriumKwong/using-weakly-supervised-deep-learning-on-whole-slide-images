@@ -36,11 +36,14 @@
 4. 只保留采样的坐标组大于指定数量(目前是只保留>5，其实也可以设置只要求>0的)的WSI文件样本，原则上要求存到lib中的都能满足基本**top k**需求(我一般设置k为5或10)，但我已经修改了官方代码在训练时读取数据的逻辑，即使某张WSI采样下来的坐标组不足也可以对已有的坐标组进行重复采样保证满足设定的k的需求。
 
 5. 运行该程序假设是有一个csv文件或者excel表格(这里暂命名为target文件，如果是excel表格的话需要自己改一下target文件的读取方法)。该文件格式如下：
+
+
 | file_name        | class |
 | :--------------: | :---: |
 | ---------*.svs   |   0   |
 | --------/*.svs   |   1   |
 | ..............   |  ...  |
+
 
 #### TUM_Identify_MIL_train.py ####
 
@@ -143,11 +146,6 @@ Validation  Epoch: [2/50]  acc - 0.4372, recall - 0.5649, fnr - 0.3443
 维持官方代码的运行方法，设置好相关配置后直接运行`python MIL_test.py`则可。
 
 **输出如下**
-
-| Pred \ target |  1   |  0   |
-| :-----------: | :--: | :--: |
-|       1       |   11   |   1   |
-|       0       |   2   |   31   |
 
 
 ![](https://github.com/BohriumKwong/using-weakly-supervised-deep-learning-on-whole-slide-images/blob/master/doc/images/result.png)
