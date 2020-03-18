@@ -83,7 +83,13 @@ def main(parser):
     early_stop_count = 0
     #标记是否early stop的变量，该变量>3时,就停止训练
     list_save_dir = os.path.join('output','topk_list')
-    if not os.path.isdir(list_save_dir): os.makedirs(list_save_dir)  
+    if not os.path.isdir(list_save_dir): os.makedirs(list_save_dir)
+    
+    best_metric_probs_inf_save = {'train_dset_slideIDX':train_dset.slideIDX,
+                                  'train_dset_grid':train_dset.grid,
+                                  'val_dset_slideIDX':val_dset.slideIDX,
+                                  'val_dset_grid':val_dset.grid
+                                  }
     #loop throuh epochs
     for epoch in range(args.nepochs):
         if epoch >=6 and early_stop_count >= 3:
@@ -162,13 +168,15 @@ def main(parser):
                 result_excel_origin(train_dset,t_pred,time_mark + 'train_' + str(epoch+1))
                 result_excel_origin(val_dset,v_pred,time_mark + 'val_'+ str(epoch+1))
 #                np.save('output/numpy_save/' +time_mark + 'train_infer_probs_' + str(epoch+1) + '.npy',train_probs)
-                np.save('output/numpy_save/' +time_mark + 'val_infer_probs_' + str(epoch+1) + '.npy',val_probs)
-        
+#                np.save('output/numpy_save/' +time_mark + 'val_infer_probs_' + str(epoch+1) + '.npy',val_probs)
+                best_metric_probs_inf_save['train_probs'] = train_probs.copy()
+                best_metric_probs_inf_save['val_probs'] = val_probs.copy()
+                
         print('\tEpoch %d has been finished, needed %.2f sec.' % (epoch + 1,time.time() - start_time))                   
     with open(os.path.join(list_save_dir, time_mark + '.pkl'), 'wb') as fp:
         pickle.dump(topk_list, fp)
     
-    
+    torch.save(best_metric_probs_inf_save, 'output/numpy_save/final/best_metric_probs_inf.db')
     
 
 def inference(run, loader, model, batch_size,phase):
