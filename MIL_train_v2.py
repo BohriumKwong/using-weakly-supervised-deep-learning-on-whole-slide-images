@@ -237,7 +237,7 @@ def calc_accuracy(pred,real):
     neq = np.not_equal(pred, real)
 #    err = float(neq.sum())/pred.shape[0]
 #    fpr = float(np.logical_and(pred==1,neq).sum())/(real==0).sum()
-    fnr = float(np.logical_and(pred==0,neq).sum())/(real==1).sum()    
+    fnr = float(np.logical_and(pred==0,neq).sum())/(real==1).sum() if (real==1).sum() >0 else 0    
     balanced_acc = balanced_accuracy_score(real,pred)
     recall = recall_score(real,pred,average='weighted')
     metrics_meters = {'acc': round(balanced_acc,3),'recall':round(recall,3),'fnr':round(fnr,3)}  
