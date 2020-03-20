@@ -112,7 +112,7 @@ def main(parser):
 #    topk_list = []
     #用于存储每一轮算出来的top k index
     early_stop_count = 0
-    #标记是否early stop的变量，该变量>epochs*2/3时,就停止训练
+    #标记是否early stop的变量，该变量>epochs*2/3时,就开始进行停止训练的判断
 
     train_probs = best_metric_probs_inf_save['train_probs']          
     topk = group_argtopk(np.array(train_dset.slideIDX), train_probs[:,1], args.k)
@@ -273,7 +273,7 @@ def group_argtopk(groups, data,k=1):
     return list(order[index])
 
 def group_max(probs,topk,k):
-    #该方法是基于每个slide的top k截图的概率相加,然后取最大值者作为最终的预测标签
+    #该方法是基于每个slide的top k截图的概率相加,然后取最大值者作为该slide最终的预测标签
     select_probs = np.array([probs[x,:] for x in topk])
     predict_result = []
     for j in range(0,select_probs.shape[0],k):
@@ -338,11 +338,15 @@ class MILdataset(data.Dataset):
     def maketraindata(self, idxs,repeat=0):
         #repeat这个参数用于是否对采样进行复制,如果进行复制,就会在下面的_getitem_方法中对重复的样本进行不一样的颜色增强
         if abs(repeat) == 0:
+            #repeat等于0的时,按用原来的方法进行生成筛选的数据,并不会进行h通道的颜色变换。
             self.t_data = [(self.slideIDX[x],self.grid[x],self.targets[self.slideIDX[x]],0) for x in idxs]
         else:
-            repeat = abs(repeat) if repeat % 2 == 1 else abs(repeat) + 1       
+            repeat = abs(repeat) if repeat % 2 == 1 else abs(repeat) + 1
+            #通过该操作确保非奇数的repeat传参也能变为奇数       
             self.t_data = [(self.slideIDX[x],self.grid[x],self.targets[self.slideIDX[x]],0) for x in idxs]
             for y in range(-100,int(100 + repeat/2),int(100*2/repeat)):
+                #将会在(-0,1,0.1)范围内按照repeat的数值进行区间划分(这也是要求repeat值必须为奇数的原因所在)
+                # 通过上面的划分,可以确保除0外在(-0,1,0.1)都会划分为repeat-1倍,需要注意最后y的值必须控制在0.1以内
                 self.t_data = self.t_data + [(self.slideIDX[x],self.grid[x],self.targets[self.slideIDX[x]],y/1000) for x in idxs]
     def shuffletraindata(self):
         self.t_data = random.sample(self.t_data, len(self.t_data))
@@ -367,11 +371,11 @@ class MILdataset(data.Dataset):
             img = self.slides[slideIDX].read_region(coord,self.level,(self.patch_size[slideIDX],\
                                                     self.patch_size[slideIDX])).convert('RGB')
             if h_value > 0:
-                hue_factor = random.uniform(h_value,0.1) 
+                hue_factor = random.uniform(h_value,0.1)
             elif h_value == 0:
-                hue_factor = random.uniform(0,0)                    
-            elif h_value < 0:                
-                hue_factor = random.uniform(-0.1,h_value)    
+                hue_factor = random.uniform(0,0)                 
+            elif h_value < 0:
+                hue_factor = random.uniform(-0.1,h_value)
             img = functional.adjust_hue(img,hue_factor)
             # 只有在训练模式下才进行H通道变换的颜色增强方法
             # 如果在maketraindata方法设置采样复制,那么就会针对h_value的值进行不同方向的hue_factor生成,\
