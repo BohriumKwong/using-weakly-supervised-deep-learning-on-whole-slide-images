@@ -74,14 +74,14 @@ def main(parser):
     #以当前时间作为保存的文件名标识        
         
     #open output file
-    fconv = open(os.path.join(args.output, time_mark + 'CNN_convergence_224.csv'), 'w')
+    fconv = open(os.path.join(args.output, time_mark + 'CNN_convergence_512.csv'), 'w')
     fconv.write(' ,Training,,,,Train_whole,,,Validation,,\n')
     fconv.write('epoch,train_acc,train_recall,train_fnr,train_loss,true_acc,true_recall,true_fnr,acc,recall,fnr')
     fconv.close()
     topk_list = []
     #用于存储每一轮算出来的top k index
     early_stop_count = 0
-    #标记是否early stop的变量，该变量>3时,就停止训练
+    #标记是否early stop的变量，该变量>epochs*2/3时,就开始进行停止训练的判断
     list_save_dir = os.path.join('output','topk_list')
     if not os.path.isdir(list_save_dir): os.makedirs(list_save_dir)
     
@@ -90,9 +90,13 @@ def main(parser):
                                   'val_dset_slideIDX':val_dset.slideIDX,
                                   'val_dset_grid':val_dset.grid
                                   }
+    #该字典主要用于保存最佳模型对应的train_probs和val_probs,以便用于后续的test和特征提取。
+    # 之所以还要保存对应的dset_slideIDX和dset_grid是因为当train_dset出现一些slide的gird比top k的k数值还少时,\
+    # 这部分的slide就会进行随机重复采样,下次直接调用的时候难免会出现部分gird和probs的记录不一致的情况,为确保严谨,\
+    # 需要将上述这些列表也保存下来。然而val_dset默认不会出现这种情况,在这里也进行保存只是为了信息的一致性。
     #loop throuh epochs
     for epoch in range(args.nepochs):
-        if epoch >=6 and early_stop_count >= 3:
+        if epoch >=args.nepochs*2/3 and early_stop_count >= 3:
             print('Early stop at Epoch:'+ str(epoch+1))
             break
         start_time = time.time()
@@ -136,20 +140,18 @@ def main(parser):
                 + ','+ str(metrics_meters['acc']) + ',' + str(metrics_meters['recall']) + ','\
                 + str(metrics_meters['fnr'])
 
-        #Validation
-#        if args.val_lib and (epoch+1) % args.test_every == 0:
         val_dset.setmode(1)
         val_probs = inference(epoch, val_loader, model, args.batch_size, 'val')
         v_topk = group_argtopk(np.array(val_dset.slideIDX), val_probs[:,1], 1)
         v_pred = group_max(val_probs,v_topk,1)
-#        np.save('output/numpy_save/val_infer_probs.npy',pred)
+
         metrics_meters = calc_accuracy(v_pred, val_dset.targets)
         str_logs = ['{} - {:.4}'.format(k, v) for k, v in metrics_meters.items()]
         s = ', '.join(str_logs)
         print('\tValidation  Epoch: [{}/{}]  '.format(epoch+1, args.nepochs) + s)
         result = result + ','+ str(metrics_meters['acc']) + ',' + str(metrics_meters['recall']) + ','\
                  + str(metrics_meters['fnr'])
-        fconv = open(os.path.join(args.output, time_mark + 'CNN_convergence_224.csv'), 'a')
+        fconv = open(os.path.join(args.output, time_mark + 'CNN_convergence_512.csv'), 'a')
         fconv.write(result)
         fconv.close()
         #Save best model
@@ -172,7 +174,7 @@ def main(parser):
                 best_metric_probs_inf_save['train_probs'] = train_probs.copy()
                 best_metric_probs_inf_save['val_probs'] = val_probs.copy()
                 
-        print('\tEpoch %d has been finished, needed %.2f sec.' % (epoch + 1,time.time() - start_time))                   
+        print('\tEpoch %d has been finished, needed %.2f sec.' % (epoch + 1,time.time() - start_time))                
     with open(os.path.join(list_save_dir, time_mark + '.pkl'), 'wb') as fp:
         pickle.dump(topk_list, fp)
     
@@ -197,11 +199,7 @@ def inference(run, loader, model, batch_size,phase):
                 batch_proba = np.mean(prob,axis=0)
                 probs = np.row_stack((probs,prob))
                 whole_probably = whole_probably + batch_proba
-#                temp_log = {'batch proba ': str(batch_proba)}
-#                logs.update(temp_log)
-#                
-#                str_logs = ['{} - {:.4}'.format(k, v) for k, v in logs.items()]
-#                s = ', '.join(str_logs)
+
                 iterator.set_postfix_str('batch proba :' + str(batch_proba))                                    
                 
             whole_probably = whole_probably / (i+1)
@@ -291,21 +289,16 @@ def group_max(probs,topk,k):
 #    out[groups[index]] = data[index]
     #######################################
     #上述说明仅针对原来的group_max方法,下面重新编写的validation评估的方法,对于每一张图片来说, \
-    # 预测的label取决于所有region截图分类概率相加后最大值者为准
+    # 现在预测的方法是基于每个slide的top k截图的概率相加,然后取最大值者作为该slide最终的预测标签
     select_probs = np.array([probs[x,:] for x in topk])
     predict_result = []
-#    groups = np.array(groups)
-#    for i in np.unique(groups):
-##        mean_proba = np.mean(data[groups==i],axis=0)
-##        whole_mean_proba = np.row_stack((whole_mean_proba,mean_proba))
-##        out[i] = np.argmax(mean_proba)
+
     for j in range(0,select_probs.shape[0],k):
         if np.sum(np.argmax(select_probs[j:j+k,:],axis=1)) >= k/2 :
             predict_result.append(1)
         else:
             predict_result.append(0)
-            
-#    return np.delete(whole_mean_proba, 0, axis=0)
+
     return np.array(predict_result)
 
 class MILdataset(data.Dataset):
@@ -328,7 +321,8 @@ class MILdataset(data.Dataset):
         # 返回为[0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2]
         for i,g in enumerate(lib['grid']):
             if len(g) < k:
-                g = g + [(g[x]) for x in np.random.choice(range(len(g)), k-len(g))]               
+                g = g + [(g[x]) for x in np.random.choice(range(len(g)), k-len(g))]
+            #当前slide已有的grid数量在k之下时,就进行随机重复采样             
             grid.extend(g)    
             slideIDX.extend([i]*len(g))
 
@@ -347,11 +341,15 @@ class MILdataset(data.Dataset):
     def maketraindata(self, idxs,repeat=0):
         #repeat这个参数用于是否对采样进行复制,如果进行复制,就会在下面的_getitem_方法中对重复的样本进行不一样的颜色增强
         if abs(repeat) == 0:
+            #repeat等于0的时,按用原来的方法进行生成筛选的数据,并不会进行h通道的颜色变换。
             self.t_data = [(self.slideIDX[x],self.grid[x],self.targets[self.slideIDX[x]],0) for x in idxs]
         else:
-            repeat = abs(repeat) if repeat % 2 == 1 else abs(repeat) + 1       
+            repeat = abs(repeat) if repeat % 2 == 1 else abs(repeat) + 1
+            #通过该操作确保非奇数的repeat传参也能变为奇数  
             self.t_data = [(self.slideIDX[x],self.grid[x],self.targets[self.slideIDX[x]],0) for x in idxs]
             for y in range(-100,int(100 + repeat/2),int(100*2/repeat)):
+                #将会在(-0,1,0.1)范围内按照repeat的数值进行区间划分(这也是要求repeat值必须为奇数的原因所在)
+                # 通过上面的划分,可以确保除0外在(-0,1,0.1)都会划分为repeat-1倍,需要注意最后y的值必须控制在0.1以内
                 self.t_data = self.t_data + [(self.slideIDX[x],self.grid[x],self.targets[self.slideIDX[x]],y/1000) for x in idxs]
     def shuffletraindata(self):
         self.t_data = random.sample(self.t_data, len(self.t_data))
@@ -376,11 +374,11 @@ class MILdataset(data.Dataset):
             img = self.slides[slideIDX].read_region(coord,self.level,(self.patch_size[slideIDX],\
                                                     self.patch_size[slideIDX])).convert('RGB')
             if h_value > 0:
-                hue_factor = random.uniform(h_value,0.1) 
+                hue_factor = random.uniform(h_value,0.1)
             elif h_value == 0:
-                hue_factor = random.uniform(0,0)                    
+                hue_factor = random.uniform(0,0)               
             elif h_value < 0:                
-                hue_factor = random.uniform(-0.1,h_value)    
+                hue_factor = random.uniform(-0.1,h_value)   
             img = functional.adjust_hue(img,hue_factor)
             # 只有在训练模式下才进行H通道变换的颜色增强方法
             # 如果在maketraindata方法设置采样复制,那么就会针对h_value的值进行不同方向的hue_factor生成,\
