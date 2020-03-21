@@ -41,8 +41,8 @@
 | file_name        | class |
 | :--------------: | :---: |
 | ---------*.svs   |   0   |
-| --------/*.svs   |   1   |
-| ..............   |  ...  |
+| ---------*.svs   |   1   |
+| .................|  ...  |
 
 
 #### TUM_Identify_MIL_train.py ####
@@ -82,6 +82,17 @@
 #### MIL_train_v2.py ####
 
 根据我们的实际使用经验，如果在MIL过程指定根据label来选取top k的话，很容易在开始的时候就让模型陷入过拟合中(其实也不难理解)，因此这种方法不适合从随机初始化参数未进行任何训练的模型，后来我们退回官方源代码的思想，只是`group_max`方法还是采用上述的[General_Identify_MIL_train.py](#General_Identify_MIL_train.py)定义的那样，暂定将此版本的脚本命名为**MIL_train_v2.py**。
+
+#### MIL_train_v3.py ####
+
+这个是在**MIL_train_v2.py**基础上修改的最终版本，也是我目前主要在用的版本。根据不同的实验比对发现，val数据集只有在**top 1**表现是最好的，而在train数据集中, **top k**中的**k**的数值越大，效果就越差,因此基本上是回到论文最初的思想。针对**MIL_train_v3.py**其他修改可以仔细查阅相关的commit log。
+
+#### origin_lstm.py ####
+
+这个是利用`pytorch`官方提供的`LSTM`类构建一个建议的基于LSTM的分类器(输入为图像经过网络全局pooling后输出的已flatten的特征)的代码。就目前来看，训练效果并不是很好。
+
+#### LSTM_train.py ####
+基于**MIL_train_v3.py**求出的数据集最佳的probs及其对应的IDX和gird信息(因为其中有可能会涉及到随机过采样,所以需要将当时生成的**dset.SlideIDX**和**dset.grid**也保存下来，详见脚本的注释和相关commit log)。通过修改dataloader的代码，实现新一轮的基于LSTM分类的训练流程，其中特征提取这一步放在自己写的dataloader中进行，不需要事前进行提取和相关存储。
 
 ****
 
