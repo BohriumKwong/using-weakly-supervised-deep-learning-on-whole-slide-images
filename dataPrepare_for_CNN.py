@@ -19,7 +19,7 @@ target_df = pd.read_csv('/yourpath/target.csv')
 #| file_name        | class |
 #| :--------------: | :---: |
 #| ---------*.svs   |   0   |
-#| --------/*.svs   |   1   |
+#| ---------*.svs   |   1   |
 #| ..............   |  ...  |
 
 
@@ -103,7 +103,7 @@ for filename in files:
                     cur_patch_cords.append((i,j))
         if len(cur_patch_cords) > 5:
             train_slides_list.append(filename)
-            train_patch_size_list(patch_size)
+            train_patch_size_list.append(patch_size)
             train_targets_list.append(target_df[target_df['slide'] == basename]['target'].values[0])
             train_grids_list.append(cur_patch_cords)
             train_sum = train_sum + len(cur_patch_cords)
@@ -125,7 +125,7 @@ for filename in files:
                     cur_patch_cords.append((i,j))
         if len(cur_patch_cords) > 5:
             val_slides_list.append(filename)
-            val_patch_size_list(patch_size)
+            val_patch_size_list.append(patch_size)
             val_targets_list.append(target_df[target_df['slide'] == basename]['target'].values[0])            
             val_grids_list.append(cur_patch_cords)
             val_sum = val_sum + len(cur_patch_cords)
