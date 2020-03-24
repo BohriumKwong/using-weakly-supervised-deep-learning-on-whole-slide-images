@@ -87,11 +87,15 @@ for i, batch in enumerate(batch_list):
             thumb = cv2.GaussianBlur(thumb, (5,5), 0)   
             thumb = cv2.threshold(thumb,240, 255, cv2.THRESH_BINARY_INV)[1]
             #thumb是过滤背景区域的二值图，>0的地方表示组织区域
-            sample_pro = min(1 - np.sum(thumb>0)/thumb.shape[0]/thumb.shape[1],0.99)
-            # sample_pro是基于组织区域占比计算出来的采样率,为了控制采样数量,需要在采样前进行概率判断,、
-            # 原则上组织区域越大的图片每一块截图采样的概率就会调低,控制整体样本数量的同时又能做到均衡采样。
-            w, h = slide.dimensions
             level_downsamples = round(slide.level_downsamples[svs_level])
+#            sample_pro = min(1 - np.sum(thumb>0)/thumb.shape[0]/thumb.shape[1],0.99)
+            sample_pro = min(7000 *(patch_size/level_downsamples)**2/np.sum(thumb>0),1)
+            #sample_pro是基于组织区域占比计算出来的采样率,为了控制采样数量,需要在采样前进行概率判断,\
+            # 注释的方法不是适用于尺寸差异太大的图片(只能根据个体比例调整,但如果出现尺寸超大的图,依然会采出很多图片,不利于训练)。\
+            # 目前的方法是设定一个具体的上限数字(如7000),如果silde有效区域/patch数量>7000就100%采样,\
+            #  否则就以7000/(silde有效区域/patch数量)来作为采样概率。
+            # 原则上组织区域越大的图片每一块截图采样的概率就会调低,控制整体样本数量的同时又能做到均衡采样。
+            w, h = slide.dimensions            
             
         #        if random.randint(0, 21) < 14:
             if batch != 'batch_4':
