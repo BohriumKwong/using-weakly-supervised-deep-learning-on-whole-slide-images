@@ -217,16 +217,15 @@ def etl_process(target_file,batch_list,data_path_list,npy_list,TCGA_USELESS,imag
             whole_data = copy.deepcopy(data_df)
         else:
             whole_data = pd.concat([whole_data,data_df],axis=0)
-    
-               
-        print('%d WSI files ,total %d samples in train data set.' %(train_flag,train_sum))
-        print('%d WSI files ,total %d samples in val data set.' %(val_flag,val_sum))
-    
+                    
     
         whole_data = whole_data.drop(['file_name'],axis =1) 
         whole_data = whole_data[whole_data['delete']!='y']
         whole_data = whole_data.drop(['delete'],axis =1)
         whole_data.to_excel('tum_etl_tag_512.xlsx',index = False)
+        
+    print('%d WSI files ,total %d samples in train data set.' %(train_flag,train_sum))
+    print('%d WSI files ,total %d samples in val data set.' %(val_flag,val_sum))
         
 
 if __name__ == '__main__':
