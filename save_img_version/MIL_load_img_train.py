@@ -104,9 +104,9 @@ def main(parser):
         topk_exist_flag = False
         if os.path.exists(os.path.join(list_save_dir, time_mark + '.pkl')) and epoch ==0:
             with open(os.path.join(list_save_dir, time_mark + '.pkl'), 'rb') as fp:
-                topk,train_probs = pickle.load(fp)
+                topk_list = pickle.load(fp)
                 
-            topk = topk[-1]
+            topk = topk_list[-1][0]
             topk_exist_flag = True
 
         else:
