@@ -198,6 +198,11 @@ root_dir/
 基于上述的以固定中心位置进行采样的data_prepare脚本和保存的图片文件目录结构而改写的train脚本。
 运行的方法和下面提就到的 **Training**差不多。
 
+### densenet_ibn_b.py ###
+在**MIL_load_img_train**和**MIL_load_img_train_v2**用到的分类模型(此前是`resnet34`),属于在`densenet`的基础上进行一定的改进,详见https://github.com/BohriumKwong/IBN-Net
+的相关说明。目前主要在用的是`densenet_ibn_b`中的densenet_121。
+
+
 
 ##  程序运行说明 ##
 可以直接看官方的[README](https://github.com/MSKCC-Computational-Pathology/MIL-nature-medicine-2019)文档，该文档也作为README文档放在./doc/下。
