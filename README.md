@@ -132,7 +132,7 @@ root_dir/
 
 |------------------|...{jpg,tif,png,bmp}
 
-### MIL_load_img_train.py###
+### MIL_load_img_train.py ###
 基于上述的data_prepare脚本和保存的图片文件目录结构而改写的train脚本，运行的方法和下面提就到的 **Training**差不多。
 
 ### dataPrepare_for_CNN_region_class_save_img_mid.py ###
@@ -194,7 +194,7 @@ root_dir/
 
 ……
 
-### MIL_load_img_train_v2.py###
+### MIL_load_img_train_v2.py ###
 基于上述的以固定中心位置进行采样的data_prepare脚本和保存的图片文件目录结构而改写的train脚本。
 运行的方法和下面提就到的 **Training**差不多。
 
