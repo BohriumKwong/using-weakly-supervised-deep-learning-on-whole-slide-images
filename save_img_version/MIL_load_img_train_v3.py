@@ -142,8 +142,9 @@ val_precision,val_recall,val_f1,val_loss,true_precision,true_recall,true_f1,true
         print('\tTraining  Epoch: [{}/{}] Precision: {} Recall:{} F1score:{} Loss: {}'.format(epoch+1, \
               args.nepochs, train_whole_precision,train_whole_recall,train_whole_f1,train_whole_loss))
         
-        topk = group_argtopk(np.array(train_dset.slideIDX), train_probs[train_dset.label_mark], args.k)
-        t_pred = group_max(train_probs,topk,args.k)        
+#        topk = group_argtopk(np.array(train_dset.slideIDX), train_probs[train_dset.label_mark], args.k)
+#        t_pred = group_max(train_probs,topk,args.k)
+        t_pred = group_identify(train_dset.slideIDX,train_probs)
         metrics_meters = calc_accuracy(t_pred, train_dset.targets)
         result = '\n'+str(epoch+1) + ',' + str(train_whole_precision) + ',' + str(train_whole_recall) + ',' + str(train_whole_f1) + ',' + str(train_whole_loss) \
                 + ',' + str(metrics_meters['precision']) + ',' + str(metrics_meters['recall']) + ','\
@@ -151,8 +152,9 @@ val_precision,val_recall,val_f1,val_loss,true_precision,true_recall,true_f1,true
 
         val_dset.setmode(1)
         val_whole_precision,val_whole_recall,val_whole_f1,val_whole_loss,val_probs = train_predict(epoch, val_loader, model, criterion, optimizer, 'val')
-        v_topk = group_argtopk(np.array(val_dset.slideIDX), val_probs[val_dset.label_mark], args.k)
-        v_pred = group_max(val_probs,v_topk,args.k)
+#        v_topk = group_argtopk(np.array(val_dset.slideIDX), val_probs[val_dset.label_mark], args.k)
+#        v_pred = group_max(val_probs,v_topk,args.k)
+        v_pred = group_identify(val_dset.slideIDX,val_probs)
 
         metrics_meters = calc_accuracy(v_pred, val_dset.targets)
         str_logs = ['{} - {:.4}'.format(k, v) for k, v in metrics_meters.items()]
@@ -304,7 +306,7 @@ def group_argtopk(groups, data,k=1):
 
 def group_identify(groups, probs):
     #group(slideIDX)
-    #这个方法有别于上述的基于top k进行这个slide预测的方法(group_argtopk)
+    #这个方法有别于下面的基于top k进行这个slide预测的方法(group_max)
     # 这次不再局限于top k而是对slide所有sample都进行统计 by Bohrium.Kwong 2020.05.12
     predict_result = []
     for i in np.unique(groups):
