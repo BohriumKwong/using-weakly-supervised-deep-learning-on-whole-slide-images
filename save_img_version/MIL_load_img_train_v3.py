@@ -253,6 +253,7 @@ def train_predict(run, loader, model, criterion, optimizer,phase='train'):
                     loss.backward()
                     optimizer.step()
                 else:
+                    output = F.softmax(output, dim=1)
                     prob = output.detach().clone()
                     prob = prob.cpu().numpy()
                     probs = np.row_stack((probs,prob))
