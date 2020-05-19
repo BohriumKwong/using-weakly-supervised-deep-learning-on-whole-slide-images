@@ -201,6 +201,9 @@ root_dir/
 ### MIL_load_img_train_v3.py ###
 inference改为采用[General_Identify_MIL_train.py](General_Identify_MIL_train.py)的策略,即如果slide的标签是0就抽取0类概率的top k，反之就抽取1类概率的top k。此外还将原来的`train`方法改为train和predict皆可共用的方法`train_predict`,因为在新的`inference`方法中我们也同样需要关注val数据集的sample的metri,并以其作为判断最佳模型的依据。
 
+### naive_train.py ###
+针对MSS/MSI最朴素的二分类思想,基于MILdataset类作为加载数据的方法进行的普通二分类训练模型的脚本,针对训练样本可能过多,在`MILdataset`中新增数据集下采样的方法。在`__getitem__`部分新增高斯模糊增强方法,同时对`train_predict`方法进行改良:在**val**模式下显示batch概率,在**train**模式下显示metric；同时新增了梯度累加的选项,在训练过程中可通过控制相关传参而将N倍batch的梯度累加,变相起到类似增加**batch size**的效果。
+
 ### densenet_ibn_b.py ###
 在[MIL_load_img_train.py](save_img_version/MIL_load_img_train.py)和[MIL_load_img_train_v2](save_img_version/MIL_load_img_train_v2.py)用到的分类模型(此前是`resnet34`),属于在`densenet`的基础上进行一定的改进,详见https://github.com/BohriumKwong/IBN-Net
 的相关说明。目前主要在用的是`densenet_ibn_b`中的densenet_121。
