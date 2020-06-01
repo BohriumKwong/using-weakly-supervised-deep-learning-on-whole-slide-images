@@ -17,7 +17,7 @@ import torchvision.transforms as transforms
 import torchvision.transforms.functional as functional
 from densenet_ibn_b import densenet121_ibn_b
 #import torchvision.models as models
-from Focal_Loss import focal_loss
+#from Focal_Loss import focal_loss
 import time
 from sklearn.metrics import precision_recall_fscore_support
 from tqdm import tqdm as tqdm
@@ -34,19 +34,19 @@ def main(parser):
 
     #cnn
     model  = densenet121_ibn_b(num_classes=2,pretrained = False)
-#    model = models.resnet34(pretrained = False)
+#    model = models.resnet18(pretrained = False)
 #    model_path = model_path = '/your_dir/resnet34-333f7ec4.pth'
-#    model_dict = torch.load('output/2020_03_06_CNN_checkpoint_best_3.9.pth')
+#    model_dict = torch.load('output/2020_05_18_resnet18_checkpoint_224.pth')
 #   如果加载自己模型就改为使用上述两句命令
 #    model.fc = nn.Linear(model.fc.in_features, 2)
     model = nn.DataParallel(model.cuda())
-#    model.load_state_dict(model_dict['state_dict'])
+#    model.load_state_dict(model_dict[2])
 #    criterion = focal_loss(alpha=[1,args.weights/(1-args.weights)], gamma=2, num_classes = 2)
     
     if args.weights==0.5:
         criterion = nn.CrossEntropyLoss().cuda()
     else:
-        w = torch.Tensor([1-args.weights, args.weights])
+        w = torch.Tensor([1, args.weights/(1-args.weights)])
         criterion = nn.CrossEntropyLoss(w).cuda()
     optimizer = optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-5)
 
@@ -79,7 +79,7 @@ def main(parser):
     #以当前时间作为保存的文件名标识        
         
     #open output file
-    fconv = open(os.path.join(args.output, time_mark + 'CNN_convergence_224_nonor_CE.csv'), 'w')
+    fconv = open(os.path.join(args.output, time_mark + 'densenet121_224_CE.csv'), 'w')
     fconv.write(' ,Train,,,,Validation,,,,Train_whole,,,Validation_whole,,\n')
     fconv.write('epoch,train_precision,train_recall,train_f1,train_loss,\
 val_precision,val_recall,val_f1,val_loss,true_precision,true_recall,true_f1,true_precision,true_recall,true_f1')
@@ -88,7 +88,7 @@ val_precision,val_recall,val_f1,val_loss,true_precision,true_recall,true_f1,true
     #用于存储每一轮算出来的top k index
     early_stop_count = 0
     #标记是否early stop的变量，该变量>epochs*2/3时,就开始进行停止训练的判断
-    list_save_dir = os.path.join('output','topk_list','minmax')
+    list_save_dir = os.path.join('output','topk_list')
     if not os.path.isdir(list_save_dir): os.makedirs(list_save_dir)
     
     best_metric_probs_inf_save = {'train_dset_slideIDX':train_dset.slideIDX,
@@ -109,8 +109,8 @@ val_precision,val_recall,val_f1,val_loss,true_precision,true_recall,true_f1,true
         start_time = time.time()
         #Train
         topk_exist_flag = False
-        if os.path.exists(os.path.join(list_save_dir, time_mark + '_224.pkl')) and epoch ==0:
-            with open(os.path.join(list_save_dir, time_mark + '_224.pkl'), 'rb') as fp:
+        if os.path.exists(os.path.join(list_save_dir, time_mark + 'densenet121_224.pkl')) and epoch ==0:
+            with open(os.path.join(list_save_dir, time_mark + 'densenet121_224.pkl'), 'rb') as fp:
                 topk_list = pickle.load(fp)
                 
 #            topk = topk_list[-1][0]
@@ -123,7 +123,9 @@ val_precision,val_recall,val_f1,val_loss,true_precision,true_recall,true_f1,true
             train_probs = inference(epoch, train_loader, model, args.batch_size, 'train')           
             topk = group_argtopk(np.array(train_dset.slideIDX), train_probs[train_dset.label_mark], args.k)
 #            t_pred = group_max(train_probs,topk,args.k)
-        repeat = 2
+        repeat = 0
+        if epoch == 0:
+            repeat = 2
         if epoch >= 2/3*args.nepochs :
 #            repeat = np.random.choice([3,5])         
             #前10轮设定在训练时复制采样,后10轮后随机决定是否复制采样
@@ -132,13 +134,13 @@ val_precision,val_recall,val_f1,val_loss,true_precision,true_recall,true_f1,true
                 early_stop_count +=1        
         if not topk_exist_flag:
             topk_list.append((topk.copy(),train_probs.copy()))
-        with open(os.path.join(list_save_dir, time_mark + '_224.pkl'), 'wb') as fp:
+        with open(os.path.join(list_save_dir, time_mark + 'densenet121_224.pkl'), 'wb') as fp:
             pickle.dump(topk_list, fp)           
         
         train_dset.maketraindata(topk,repeat)
         train_dset.shuffletraindata()
         train_dset.setmode(2)
-        train_whole_precision,train_whole_recall,train_whole_f1,train_whole_loss = train_predict(epoch, train_loader, model, criterion, optimizer)
+        train_whole_precision,train_whole_recall,train_whole_f1,train_whole_loss = train_predict(epoch, train_loader, model, criterion, optimizer,'train')
         print('\tTraining  Epoch: [{}/{}] Precision: {} Recall:{} F1score:{} Loss: {}'.format(epoch+1, \
               args.nepochs, train_whole_precision,train_whole_recall,train_whole_f1,train_whole_loss))
         
@@ -163,27 +165,27 @@ val_precision,val_recall,val_f1,val_loss,true_precision,true_recall,true_f1,true
         result = result + ',' + str(val_whole_precision) + ',' +str(val_whole_recall) + ',' +str(val_whole_f1) + ',' \
                  + str(val_whole_loss) + ','+ str(metrics_meters['precision']) + ',' + str(metrics_meters['recall']) + ','\
                  + str(metrics_meters['f1score'])
-        fconv = open(os.path.join(args.output, time_mark + 'CNN_convergence_224_nonor_CE.csv'), 'a')
+        fconv = open(os.path.join(args.output, time_mark + 'densenet121_224_CE.csv'), 'a')
         fconv.write(result)
         fconv.close()
         #Save best model
         tmp_acc = val_whole_f1 #(metrics_meters['acc'] + metrics_meters['recall'])/2 #- metrics_meters['fnr']*args.weights
         if tmp_acc >= best_acc:
-            best_acc = tmp_acc.copy()
-#            obj = {
-#                'epoch': epoch+1,
-#                'state_dict': model.state_dict(),
-#                'best_acc': best_acc,
+            best_acc = copy.copy(tmp_acc)
+            obj = {
+                'epoch': epoch+1,
+                'state_dict': model.state_dict(),
+                'best_acc': best_acc
 #                'optimizer' : optimizer.state_dict()
-#            }
-#            torch.save(obj, os.path.join(args.output, time_mark +'CNN_checkpoint_best.pth'))
+            }
+            torch.save(obj, os.path.join(args.output, time_mark +'densenet121_checkpoint_best.pth'))
             best_metric_probs_inf_save['train_probs'] = train_probs.copy()
             best_metric_probs_inf_save['val_probs'] = val_probs.copy()
             
         if epoch > 0:
-            eopch_save.update({epoch+1:copy.copy(model.state_dict())})
-            result_excel_origin(train_dset,t_pred,time_mark + 'train_' + str(epoch+1))
-            result_excel_origin(val_dset,v_pred,time_mark + 'val_'+ str(epoch+1))
+            eopch_save.update({'state_dict':copy.copy(model.state_dict())})
+            result_excel_origin(train_dset,t_pred,time_mark + 'train_' + str(epoch+1),'resnet18')
+            result_excel_origin(val_dset,v_pred,time_mark + 'val_'+ str(epoch+1),'resnet18')
 #                np.save('output/numpy_save/' +time_mark + 'train_infer_probs_' + str(epoch+1) + '.npy',train_probs)
 #                np.save('output/numpy_save/' +time_mark + 'val_infer_probs_' + str(epoch+1) + '.npy',val_probs)
 
@@ -192,8 +194,8 @@ val_precision,val_recall,val_f1,val_loss,true_precision,true_recall,true_f1,true
 #    with open(os.path.join(list_save_dir, time_mark + '.pkl'), 'wb') as fp:
 #        pickle.dump(topk_list, fp)
     
-        torch.save(best_metric_probs_inf_save, 'output/numpy_save/final/minmax/best_metric_probs_inf_224.db')
-        torch.save(eopch_save, os.path.join(args.output, time_mark +'densenet121_ibn_b_checkpoint_224.pth'))
+        torch.save(best_metric_probs_inf_save, 'output/numpy_save/densenet121_probs_inf_224.db')
+        torch.save(eopch_save, os.path.join(args.output, time_mark +str(epoch + 1) + '_densenet121_checkpoint_224.pth'))
     
 
 def inference(run, loader, model, batch_size,phase):
@@ -230,9 +232,9 @@ def train_predict(run, loader, model, criterion, optimizer,phase='train'):
     elif phase == 'train':
         model.train()
     whole_loss = 0.
-    whole_acc = 0.
-    whole_recall = 0.
-    whole_f1 = 0.
+    whole_target = np.zeros((1,1))
+    whole_predict = np.zeros((1,1))
+
     logs = {}
 
     with tqdm(loader, desc = 'Epoch:' + str(run+1) + ' is ' + phase, \
@@ -240,15 +242,17 @@ def train_predict(run, loader, model, criterion, optimizer,phase='train'):
         with torch.set_grad_enabled(phase == 'train'):
             for i, (input, target) in enumerate(iterator):
                 input = input.cuda()
+                whole_target = np.row_stack((whole_target,target.reshape(-1,1)))
                 target = target.cuda()
                 output = model(input)
                 loss = criterion(output, target)
                 _, pred = torch.max(output, 1)
                 pred = pred.data.cpu().numpy()
                 metrics_meters = calc_accuracy(pred, target.cpu().numpy())
+                whole_predict = np.row_stack((whole_predict,pred.reshape(-1,1)))
                 logs.update(metrics_meters)
                 logs.update({'loss':loss.item()})
-                optimizer.zero_grad()
+
                 if phase == 'train':
                     loss.backward()
                     optimizer.step()
@@ -257,21 +261,24 @@ def train_predict(run, loader, model, criterion, optimizer,phase='train'):
                     prob = output.detach().clone()
                     prob = prob.cpu().numpy()
                     probs = np.row_stack((probs,prob))
-                    
+
+                optimizer.zero_grad()
                 str_logs = ['{} - {:.4}'.format(k, v) for k, v in logs.items()]
                 s = ', '.join(str_logs)
                 iterator.set_postfix_str(s)
                 
-                whole_acc += metrics_meters['precision']
-                whole_recall += metrics_meters['recall']
-                whole_f1 += metrics_meters['f1score']
                 whole_loss += loss.item()
+
+    whole_target = np.delete(whole_target, 0, axis=0)
+    whole_predict = np.delete(whole_predict, 0, axis=0)
+    whole_metrics_meters = calc_accuracy(whole_predict, whole_target)
     
     if phase == 'train':
-        return round(whole_acc/(i+1),3),round(whole_recall/(i+1),3),round(whole_f1/(i+1),3),round(whole_loss/(i+1),3)
+        return whole_metrics_meters['precision'],whole_metrics_meters['recall'],whole_metrics_meters['f1score'],round(whole_loss/(i+1),3)
     else:
         probs = np.delete(probs, 0, axis=0)
-        return round(whole_acc/(i+1),3),round(whole_recall/(i+1),3),round(whole_f1/(i+1),3),round(whole_loss/(i+1),3),probs.reshape(-1,2)
+        return whole_metrics_meters['precision'],whole_metrics_meters['recall'],whole_metrics_meters['f1score'],round(whole_loss/(i+1),3),probs.reshape(-1,2)
+
     
 def calc_accuracy(pred,real):
     if str(type(pred)) !="<class 'numpy.ndarray'>":
@@ -390,15 +397,18 @@ class MILdataset(data.Dataset):
             if len(g) < k:
                 g = g + [(g[x]) for x in np.random.choice(range(len(g)), k-len(g))]
             #当前slide已有的grid数量在k之下时,就进行随机重复采样            
-            grid.extend(g)    
-            slideIDX.extend([i]*len(g))
             if int(lib['targets'][i]) == 0:
+#                g = random.sample(g, max(int(len(g)/4),k))
+                 #可以用这个语句实现基于每个slide的sample下采样
                 label_mark.extend([(True,False)]*len(g))
             elif int(lib['targets'][i]) == 1:
+#                g = random.sample(g, max(int(len(g)/1.5),k))
+                 #可以用这个语句实现基于每个slide的sample下采样
                 label_mark.extend([(False,True)]*len(g))
             #根据label返回对应的True/False索引,好让在inference过程中执行min_max抽取\
             # 如果slide的标签是0就抽取0类概率的top k，反之就抽取1类概率的top k. by Bohrium.Kwong 2020.05.12
-
+            grid.extend(g)
+            slideIDX.extend([i]*len(g))
 
         print('Number of tiles: {}'.format(len(grid)))
         self.slidenames = slides_list
@@ -487,17 +497,17 @@ if __name__ == '__main__':
     # parser.add_argument('--k', default=1, type=int, help='top k tiles are assumed to be of the same class as the slide (default: 1, standard MIL)')
     
     parser = argparse.ArgumentParser(description='MIL-nature-medicine-2019 tile classifier training script')
-    parser.add_argument('--train_lib', type=str, default='output/lib/512/tum_region_mid/cnn_train_data_lib.db', help='path to train MIL library binary')
-    parser.add_argument('--select_lib', type=str, default='output/lib/512/tum_region_mid/spilt_train_val.db', help='path to validation MIL library binary. If present.')
-    parser.add_argument('--train_dir',type=str, default='/cptjack/totem_disk/totem/colon_pathology_data/MIL_202005/224')
-    parser.add_argument('--output', type=str, default='output/p_r_f1/minmax', help='name of output file')
+    parser.add_argument('--train_lib', type=str, default='/media/totem_disk/totem/kwong/MSI_MUT/NEW_MIL_CODE/output/lib/tum_region_mid/cnn_train_data_lib.db', help='path to train MIL library binary')
+    parser.add_argument('--select_lib', type=str, default='/media/totem_disk/totem/kwong/MSI_MUT/NEW_MIL_CODE/output/lib/tum_region_mid/spilt_train_val.db', help='path to validation MIL library binary. If present.')
+    parser.add_argument('--train_dir',type=str, default='/media/biototem/totem_data_backup/totem/MIL_202005/224', help='root path to whole dataset. If present.')
+    parser.add_argument('--output', type=str, default='output/downsample/densenet121', help='name of output dir')
     parser.add_argument('--batch_size', type=int, default=64, help='mini-batch size (default: 512)')
     parser.add_argument('--nepochs', type=int, default=20, help='number of epochs')
     parser.add_argument('--workers', default=0, type=int, help='number of data loading workers (default: 4)')
     # 如果是在docker中运行时需注意,因为容器设定的shm内存不够会出现相关报错,此时将num_workers设为0则可
     #parser.add_argument('--test_every', default=10, type=int, help='test on val every (default: 10)')
-    parser.add_argument('--weights', default=0.82, type=float, help='unbalanced positive class weight (default: 0.5, balanced classes)')
-    parser.add_argument('--k', default=140, type=int, help='top k tiles are assumed to be of the same class as the slide (default: 1, standard MIL)')
+    parser.add_argument('--weights', default=0.55, type=float, help='unbalanced positive class weight (default: 0.5, balanced classes)')
+    parser.add_argument('--k', default=100, type=int, help='top k tiles are assumed to be of the same class as the slide (default: 1, standard MIL)')
     #parser.add_argument('--tqdm_visible',default = True, type=bool,help='keep the processing of tqdm visible or not, default: True')
 
     main(parser)
